@@ -2,10 +2,21 @@ use async_std::{
     prelude::*,
     task,
     net::{TcpListener, TcpStream, ToSocketAddrs},
-    io::BufReader,
+    io::{self, BufReader},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+fn spawn_and_log_error<F>(fut: F) -> task::JoinHandle<()>
+where
+    F: Future<Output = Result<()>> + Send + 'static,
+{
+    task::spawn(async move {
+        if let Err(e) = fut.await {
+            eprintln!("{}", e)
+        }
+    })
+}
 
 async fn accept_loop(addr: impl ToSocketAddrs) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
@@ -13,8 +24,7 @@ async fn accept_loop(addr: impl ToSocketAddrs) -> Result<()> {
     while let Some(stream) = incoming.next().await {
         let stream = stream?;
         println!("Accepting from: {}", stream.peer_addr()?);
-        let handle = task::spawn(connection_loop(stream));
-        handle.await
+        spawn_and_log_error(connection_loop(stream));
     }
     Ok(())
 }
