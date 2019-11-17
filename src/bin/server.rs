@@ -1,8 +1,8 @@
 use async_std::{
+    io::BufReader,
+    net::{TcpListener, TcpStream, ToSocketAddrs},
     prelude::*,
     task,
-    net::{TcpListener, TcpStream, ToSocketAddrs},
-    io::BufReader,
 };
 use futures::channel::mpsc;
 use futures::{select, FutureExt, SinkExt};
@@ -13,16 +13,16 @@ use std::{
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+type Sender<T> = mpsc::UnboundedSender<T>;
+type Receiver<T> = mpsc::UnboundedReceiver<T>;
 
-fn spawn_and_log_error<F>(fut: F) -> task::JoinHandle<()>
-where
-    F: Future<Output = Result<()>> + Send + 'static,
-{
-    task::spawn(async move {
-        if let Err(e) = fut.await {
-            eprintln!("{}", e)
-        }
-    })
+#[derive(Debug)]
+enum Void {}
+
+fn main() -> Result<()> {
+    let fut = accept_loop("127.0.0.1:8080");
+    println!("Listening ...");
+    task::block_on(fut)
 }
 
 async fn accept_loop(addr: impl ToSocketAddrs) -> Result<()> {
@@ -78,9 +78,6 @@ async fn connection_loop(mut broker: Sender<Event>, stream: TcpStream) -> Result
     Ok(())
 }
 
-type Sender<T> = mpsc::UnboundedSender<T>;
-type Receiver<T> = mpsc::UnboundedReceiver<T>;
-
 async fn connection_writer_loop(
     messages: &mut Receiver<String>,
     stream: Arc<TcpStream>,
@@ -104,9 +101,6 @@ async fn connection_writer_loop(
     }
     Ok(())
 }
-
-#[derive(Debug)]
-enum Void {}
 
 #[derive(Debug)]
 enum Event {
@@ -173,8 +167,13 @@ async fn broker_loop(mut events: Receiver<Event>) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let fut = accept_loop("127.0.0.1:8080");
-    println!("Listening ...");
-    task::block_on(fut)
+fn spawn_and_log_error<F>(fut: F) -> task::JoinHandle<()>
+where
+    F: Future<Output = Result<()>> + Send + 'static,
+{
+    task::spawn(async move {
+        if let Err(e) = fut.await {
+            eprintln!("{}", e)
+        }
+    })
 }
