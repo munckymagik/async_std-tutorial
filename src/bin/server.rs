@@ -32,7 +32,7 @@ async fn accept_loop(addr: impl ToSocketAddrs) -> Result<()> {
     let mut incoming = listener.incoming();
     while let Some(stream) = incoming.next().await {
         let stream = stream?;
-        println!("Accepting from: {}", stream.peer_addr()?);
+        println!("accept_loop: accepting from: {}", stream.peer_addr()?);
         spawn_and_log_error(connection_loop(broker_sender.clone(), stream));
     }
     drop(broker_sender);
@@ -49,7 +49,7 @@ async fn connection_loop(mut broker: Sender<Event>, stream: TcpStream) -> Result
         None => Err("peer disconnected immediately")?,
         Some(line) => line?,
     };
-    println!("name = {}", name);
+    println!("connection_loop: connect from name = {}", name);
 
     let (_shutdown_sender, shutdown_receiver) = mpsc::unbounded::<Void>();
     broker.send(Event::NewPeer {
@@ -58,6 +58,7 @@ async fn connection_loop(mut broker: Sender<Event>, stream: TcpStream) -> Result
         shutdown: shutdown_receiver,
     }).await.unwrap();
 
+    println!("connection_loop: awaiting lines from = {}", name);
     while let Some(line) = lines.next().await {
         let line = line?;
         let (dest, msg) = match line.find(':') {
