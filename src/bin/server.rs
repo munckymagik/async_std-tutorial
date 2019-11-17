@@ -27,7 +27,6 @@ fn main() -> Result<()> {
 
 async fn accept_loop(addr: impl ToSocketAddrs) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
-
     let (broker_sender, broker_receiver) = mpsc::unbounded();
     let broker_handle = task::spawn(broker_loop(broker_receiver));
     let mut incoming = listener.incoming();
@@ -63,7 +62,7 @@ async fn connection_loop(mut broker: Sender<Event>, stream: TcpStream) -> Result
         let line = line?;
         let (dest, msg) = match line.find(':') {
             None => continue,
-            Some(idx) =>  (&line[..idx], line[idx + 1 ..].trim()),
+            Some(idx) => (&line[..idx], line[idx + 1 ..].trim()),
         };
         let dest: Vec<String> = dest.split(',').map(|name| name.trim().to_string()).collect();
         let msg: String = msg.trim().to_string();
@@ -97,7 +96,6 @@ async fn connection_writer_loop(
                 None => break,
             }
         }
-
     }
     Ok(())
 }
@@ -116,11 +114,11 @@ enum Event {
     },
 }
 
-async fn broker_loop(mut events: Receiver<Event>) -> Result<()> {
+async fn broker_loop(events: Receiver<Event>) -> Result<()> {
     let (disconnect_sender, mut disconnect_receiver) =
         mpsc::unbounded::<(String, Receiver<String>)>();
     let mut peers: HashMap<String, Sender<String>> = HashMap::new();
-
+    let mut events = events.fuse();
     loop {
         let event = select! {
             event = events.next().fuse() => match event {
@@ -138,7 +136,8 @@ async fn broker_loop(mut events: Receiver<Event>) -> Result<()> {
                 for addr in to {
                     if let Some(peer) = peers.get_mut(&addr) {
                         let msg = format!("from {}: {}\n", from, msg);
-                        peer.send(msg).await.unwrap()
+                        peer.send(msg).await
+                            .unwrap()
                     }
                 }
             }
@@ -151,7 +150,8 @@ async fn broker_loop(mut events: Receiver<Event>) -> Result<()> {
                         let mut disconnect_sender = disconnect_sender.clone();
                         spawn_and_log_error(async move {
                             let res = connection_writer_loop(&mut client_receiver, stream, shutdown).await;
-                            disconnect_sender.send((name, client_receiver)).await.unwrap();
+                            disconnect_sender.send((name, client_receiver)).await
+                                .unwrap();
                             res
                         });
                     }
